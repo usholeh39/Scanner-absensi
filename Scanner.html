@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Scanner Absensi Karang Taruna</title>
+
+  <!-- Library scanner -->
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 15px;
+      font-family: Arial, sans-serif;
+      background: #f1f5f9;
+    }
+
+    .container {
+      max-width: 500px;
+      margin: auto;
+    }
+
+    .header {
+      background: #166534;
+      color: white;
+      padding: 20px;
+      border-radius: 15px;
+      text-align: center;
+      margin-bottom: 15px;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    .header p {
+      margin-bottom: 0;
+    }
+
+    .card {
+      background: white;
+      padding: 18px;
+      border-radius: 15px;
+      margin-bottom: 15px;
+      box-shadow: 0 3px 10px rgba(0,0,0,.08);
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    select {
+      width: 100%;
+      padding: 13px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 16px;
+      background: white;
+    }
+
+    #reader {
+      width: 100%;
+      overflow: hidden;
+      border-radius: 12px;
+    }
+
+    .info {
+      text-align: center;
+      color: #64748b;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
+    #hasil {
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+      min-height: 100px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      font-weight: bold;
+    }
+
+    .normal {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    .sukses {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .gagal {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .sudah {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .nama {
+      font-size: 25px;
+      margin: 8px;
+    }
+
+    .jam {
+      font-size: 28px;
+      margin: 8px;
+    }
+
+    .manual {
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .manual input {
+      width: 100%;
+      padding: 13px;
+      font-size: 18px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 10px;
+      padding: 13px;
+      background: #166534;
+      color: white;
+      border: 0;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <h1>ABSENSI KARANG TARUNA</h1>
+    <p>Scanner Barcode Anggota</p>
+  </div>
+
+  <div class="card">
+
+    <label>Pilih Kegiatan</label>
+
+    <select id="kegiatan">
+      <option value="">Memuat kegiatan...</option>
+    </select>
+
+  </div>
+
+  <div class="card">
+
+    <div style="text-align:center;font-weight:bold;margin-bottom:12px;">
+      📷 SCANNER BARCODE
+    </div>
+
+    <div id="reader"></div>
+
+    <div class="info">
+      Arahkan kamera belakang ke barcode kartu anggota
+    </div>
+
+    <div class="manual">
+
+      <div style="margin-bottom:8px;font-weight:bold;">
+        Jika kamera bermasalah:
+      </div>
+
+      <input
+        id="kodeManual"
+        placeholder="Contoh: KT001"
+        autocomplete="off">
+
+      <button onclick="scanManual()">
+        ABSEN MANUAL
+      </button>
+
+    </div>
+
+  </div>
+
+  <div id="hasil" class="normal">
+    Pilih kegiatan lalu arahkan kamera
+    ke barcode anggota.
+  </div>
+
+</div>
+
+
+<script>
+
+/*
+==================================================
+PENTING
+==================================================
+
+GANTI URL DI BAWAH DENGAN URL WEB APP APPS SCRIPT
+ANDA.
+
+Contoh:
+
+https://script.google.com/macros/s/XXXXX/exec
+*/
+
+const APPS_SCRIPT_URL =
+  "https://script.google.com/macros/u/1/s/AKfycbxwPuXtAiNByGjmbsyeU6GXK-S746lgrhpukyOQ3PIOKI52U1gDmgdCKO8N7k1AdA/exec";
+
+
+let scanner = null;
+let sedangProses = false;
+let kodeTerakhir = "";
+let waktuScanTerakhir = 0;
+
+
+/*
+==================================================
+HASIL
+==================================================
+*/
+
+function tampilNormal(pesan) {
+
+  const el = document.getElementById("hasil");
+
+  el.className = "normal";
+  el.innerHTML = pesan;
+}
+
+
+function tampilGagal(pesan) {
+
+  const el = document.getElementById("hasil");
+
+  el.className = "gagal";
+
+  el.innerHTML =
+    "<div>✕ GAGAL</div>" +
+    "<div>" + pesan + "</div>";
+}
+
+
+/*
+==================================================
+KEGIATAN
+==================================================
+*/
+
+async function loadKegiatan() {
+
+  try {
+
+    const response =
+      await fetch(
+        APPS_SCRIPT_URL +
+        "?action=kegiatan"
+      );
+
+    const data =
+      await response.json();
+
+    const select =
+      document.getElementById("kegiatan");
+
+    select.innerHTML = "";
+
+    if (!data || data.length === 0) {
+
+      select.innerHTML =
+        '<option value="">Tidak ada kegiatan aktif</option>';
+
+      tampilGagal(
+        "Belum ada kegiatan yang aktif."
+      );
+
+      return;
+    }
+
+    data.forEach(function(item) {
+
+      const option =
+        document.createElement("option");
+
+      option.value = item.id;
+
+      option.textContent =
+        item.nama + " - " + item.tanggal;
+
+      select.appendChild(option);
+
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    tampilGagal(
+      "Tidak dapat mengambil data kegiatan."
+    );
+  }
+}
+
+
+/*
+==================================================
+PROSES ABSENSI
+==================================================
+*/
+
+async function prosesScan(kode) {
+
+  kode = String(kode || "")
+    .trim()
+    .toUpperCase();
+
+  if (!kode) return;
+
+  const kegiatan =
+    document.getElementById("kegiatan").value;
+
+  if (!kegiatan) {
+    tampilGagal("Pilih kegiatan terlebih dahulu.");
+    return;
+  }
+
+  const sekarang = Date.now();
+
+  if (
+    kode === kodeTerakhir &&
+    sekarang - waktuScanTerakhir < 3000
+  ) {
+    return;
+  }
+
+  kodeTerakhir = kode;
+  waktuScanTerakhir = sekarang;
+
+  if (sedangProses) return;
+
+  sedangProses = true;
+
+  tampilNormal(
+    "⏳ Memproses absensi " + kode + "..."
+  );
+
+  try {
+
+    const url =
+      APPS_SCRIPT_URL +
+      "?action=absen" +
+      "&barcode=" +
+      encodeURIComponent(kode) +
+      "&kegiatanId=" +
+      encodeURIComponent(kegiatan);
+
+    const response =
+      await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(
+        "Server memberikan status " +
+        response.status
+      );
+    }
+
+    const data =
+      await response.json();
+
+    tampilHasil(data);
+
+  } catch (error) {
+
+    console.error(error);
+
+    tampilGagal(
+      "Gagal mengirim absensi.<br><br>" +
+      error.message
+    );
+
+  } finally {
+
+    setTimeout(function() {
+      sedangProses = false;
+    }, 2000);
+
+  }
+}
+
+
+/*
+==================================================
+HASIL ABSENSI
+==================================================
+*/
+
+function tampilHasil(data) {
+
+  const el =
+    document.getElementById("hasil");
+
+
+  if (data.sukses) {
+
+    el.className = "sukses";
+
+    el.innerHTML =
+
+      "<div>✓ HADIR</div>" +
+
+      '<div class="nama">' +
+      data.nama +
+      "</div>" +
+
+      "<div>" +
+      data.id +
+      "</div>" +
+
+      '<div class="jam">' +
+      data.jam +
+      "</div>" +
+
+      "<div>" +
+      data.pesan +
+      "</div>";
+
+    return;
+  }
+
+
+  if (data.sudahAbsen) {
+
+    el.className = "sudah";
+
+    el.innerHTML =
+
+      "<div>⚠ SUDAH ABSEN</div>" +
+
+      '<div class="nama">' +
+      data.nama +
+      "</div>" +
+
+      "<div>" +
+      data.id +
+      "</div>" +
+
+      "<div>" +
+      data.pesan +
+      "</div>";
+
+    return;
+  }
+
+
+  tampilGagal(
+    data.pesan ||
+    "Absensi gagal."
+  );
+}
+
+
+/*
+==================================================
+MANUAL
+==================================================
+*/
+
+function scanManual() {
+
+  const input =
+    document.getElementById(
+      "kodeManual"
+    );
+
+  const kode =
+    input.value
+      .trim()
+      .toUpperCase();
+
+  if (!kode) {
+
+    tampilGagal(
+      "Masukkan kode anggota."
+    );
+
+    return;
+  }
+
+  prosesScan(kode);
+
+  input.value = "";
+}
+
+
+/*
+==================================================
+SCANNER KAMERA
+==================================================
+*/
+
+async function mulaiScanner() {
+
+  try {
+
+    if (
+      typeof Html5Qrcode ===
+      "undefined"
+    ) {
+
+      throw new Error(
+        "Library scanner belum dimuat."
+      );
+    }
+
+
+    const cameras =
+      await Html5Qrcode.getCameras();
+
+
+    if (
+      !cameras ||
+      cameras.length === 0
+    ) {
+
+      throw new Error(
+        "Kamera tidak ditemukan."
+      );
+    }
+
+
+    console.log(
+      "Kamera tersedia:",
+      cameras
+    );
+
+
+    let kameraBelakang =
+      cameras.find(function(camera) {
+
+        const nama =
+          (camera.label || "")
+            .toLowerCase();
+
+        return (
+          nama.includes("back") ||
+          nama.includes("rear") ||
+          nama.includes("environment") ||
+          nama.includes("belakang")
+        );
+
+      });
+
+
+    const cameraId =
+      kameraBelakang
+        ? kameraBelakang.id
+        : cameras[0].id;
+
+
+    scanner =
+      new Html5Qrcode("reader");
+
+
+    const config = {
+
+      fps: 10,
+
+      qrbox: function(width, height) {
+
+        const ukuran =
+          Math.min(width, height) *
+          0.70;
+
+        return {
+
+          width:
+            Math.floor(ukuran),
+
+          height:
+            Math.floor(ukuran)
+
+        };
+
+      },
+
+      formatsToSupport: [
+
+        Html5QrcodeSupportedFormats.CODE_128,
+
+        Html5QrcodeSupportedFormats.QR_CODE
+
+      ]
+
+    };
+
+
+    await scanner.start(
+
+      cameraId,
+
+      config,
+
+      function(decodedText) {
+
+        console.log(
+          "Barcode:",
+          decodedText
+        );
+
+        prosesScan(decodedText);
+
+      },
+
+      function(errorMessage) {
+
+        // abaikan error pembacaan frame
+
+      }
+
+    );
+
+
+  } catch (error) {
+
+    console.error(error);
+
+    tampilGagal(
+      "Kamera tidak dapat digunakan.<br><br>" +
+      error.message
+    );
+
+  }
+
+}
+
+
+/*
+==================================================
+JALANKAN
+==================================================
+*/
+
+loadKegiatan();
+
+setTimeout(function() {
+
+  mulaiScanner();
+
+}, 500);
+
+</script>
+
+</body>
+</html>
